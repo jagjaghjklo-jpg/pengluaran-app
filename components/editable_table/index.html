@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+
+    <style>
+        body {
+            margin: 0;
+            background: #002f02;
+            font-family: Arial, sans-serif;
+        }
+
+        .custom-table {
+            width: 100;
+            border-collapse: collapse;
+            font-size: 15px;
+            background: white;
+        }
+
+        .overflow{
+            overflow: auto;
+        }
+         
+        .delete-button {
+        background: #b71c1c;
+        }
+
+        .delete-button:hover {
+        background: #8f1414;
+        }
+        
+        .custom-table th {
+            background: #6fb0ff;
+            color: #000;
+            border: 1px solid #5995de;
+            padding: 8px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .custom-table td {
+            background: #0b2847;
+            color: white;
+            border: 1px solid #2e3d4d;
+            padding: 7px 8px;
+        }
+
+        .custom-table input {
+            width: 100%;
+            box-sizing: border-box;
+            background: transparent;
+            color: white;
+            border: none;
+            outline: none;
+            font-size: 15px;
+            padding: 2px;
+        }
+
+        .custom-table input:focus {
+            background: #26364a;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .left {
+            text-align: left;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .tanggal-divider td {
+            background: #D4A017 !important;
+            border: none !important;
+            padding: 0 !important;
+            height: 5px;
+        }
+
+        .button-container {
+            margin-top: px;
+            text-align: right;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #2e7d32;
+            color: white;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #3da342;
+        }
+
+        button:active {
+            background: #1b4d1e;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="app"></div>
+
+<script>
+
+const editableColumns = [
+    "Tanggal",
+    "Kategori",
+    "Barang",
+    "Harga",
+    "Jumlah",
+    "Subtotal"
+];
+
+let tableData = [];
+
+function sendValue(value) {
+
+    window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: value
+    }, "*");
+
+}
+
+function setHeight() {
+
+    window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setFrameHeight",
+        height: document.body.scrollHeight
+    }, "*");
+
+}
+
+function escapeHtml(value) {
+
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+}
+
+function formatRupiah(value) {
+
+    if (value === "" || value === null || value === undefined) {
+        return "";
+    }
+
+    let angka = String(value)
+        .replaceAll(".", "")
+        .replaceAll(",", "");
+
+    if (isNaN(angka)) {
+        return value;
+    }
+
+    return Number(angka).toLocaleString("id-ID");
+}
+
+function render() {
+
+    const app = document.getElementById("app");
+
+    if (!tableData.length) {
+        app.innerHTML = "<p>Tidak ada data.</p>";
+        setHeight();
+        return;
+    }
+
+    const kolomTersembunyi = ["_sheet", "_excel_row"];
+    const columns = Object.keys(tableData[0]).filter(
+    col => !kolomTersembunyi.includes(col)
+    );
+
+    let html = `
+    <div class="overflow">
+        <table class="custom-table">
+            <thead>
+                <tr>
+    `;
+    html += `<th></th>`;
+    columns.forEach(column => {
+
+        html += `<th>${escapeHtml(column)}</th>`;
+
+    });
+   
+
+    html += `
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    let previousDate = null;
+
+    tableData.forEach((row, rowIndex) => {
+
+        const currentDate = String(row["Tanggal"] ?? "").trim();
+
+        if (
+            previousDate !== null &&
+            currentDate !== previousDate
+        ) {
+
+            html += `
+                <tr class="tanggal-divider">
+                    <td colspan="${columns.length}"></td>
+                </tr>
+            `;
+
+        }
+
+        html += "<tr>";
+        html += `
+        <td>
+        <input type="checkbox" class="row-checkbox" data-row="${rowIndex}">
+        </td>
+       `;
+        columns.forEach(column => {
+
+            let value = row[column] ?? "";
+
+            let align = "left";
+
+            if (
+                column === "Harga" ||
+                column === "Subtotal" ||
+                column === "Diskon"
+            ) {
+                align = "right";
+            }
+
+            if (
+                column === "Tanggal" ||
+                column === "Jumlah"
+            ) {
+                align = "center";
+            }
+
+            if (column === "Harga" || column === "Subtotal") {
+
+                value = formatRupiah(value);
+
+            }
+
+            if (editableColumns.includes(column)) {
+
+                html += `
+                    <td class="${align}">
+                        <input
+                            type="text"
+                            value="${escapeHtml(value)}"
+                            data-row="${rowIndex}"
+                            data-column="${escapeHtml(column)}"
+                        >
+                    </td>
+                `;
+
+            } else {
+
+                if (column === "Diskon") {
+                    value = formatRupiah(value);
+                }
+
+                html += `
+                    <td class="${align}">
+                        ${escapeHtml(value)}
+                    </td>
+                `;
+
+            }
+
+        });
+
+        html += "</tr>";
+
+        previousDate = currentDate;
+
+    });
+
+    html += `
+            </tbody>
+        </table>
+</div>
+        <div class="button-container">
+            <button id="saveButton">
+                Simpan Perubahan
+            </button>
+                    <button id="deleteButton" class="delete-button">
+            Hapus yang Dicentang
+        </button>
+        </div>
+    `;
+
+    app.innerHTML = html;
+
+    document
+        .querySelectorAll("input")
+        .forEach(input => {
+
+            input.addEventListener("input", function() {
+
+                const row = Number(this.dataset.row);
+                const column = this.dataset.column;
+
+                tableData[row][column] = this.value;
+
+            });
+
+        });
+
+    document
+        .getElementById("saveButton")
+        .addEventListener("click", function() {
+
+            sendValue({
+                action: "save",
+                data: tableData
+            });
+
+        });
+    document
+    .getElementById("deleteButton")
+    .addEventListener("click", function() {
+
+        const terpilih = [];
+
+        document
+            .querySelectorAll(".row-checkbox:checked")
+            .forEach(checkbox => {
+                const idx = Number(checkbox.dataset.row);
+                terpilih.push(tableData[idx]);
+            });
+
+        if (terpilih.length === 0) {
+            alert("Belum ada baris yang dicentang.");
+            return;
+        }
+
+        const konfirmasi = confirm(`Yakin hapus ${terpilih.length} baris?`);
+
+        if (konfirmasi) {
+            sendValue({
+                action: "delete",
+                data: terpilih
+            });
+        }
+
+    });
+    
+    setHeight();
+
+}
+
+window.addEventListener("message", function(event) {
+
+    if (!event.data) {
+        return;
+    }
+
+    if (event.data.type === "streamlit:render") {
+
+        tableData = event.data.args.data || [];
+
+        render();
+
+    }
+
+});
+
+window.parent.postMessage({
+    isStreamlitMessage: true,
+    type: "streamlit:componentReady",
+    apiVersion: 1
+}, "*");
+
+</script>
+
+</body>
+</html>

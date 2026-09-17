@@ -1,0 +1,51 @@
+.custom-table{
+    width:120%;
+    border-collapse:collapse;
+    font-size:15px;
+    font-family:Arial, sans-serif;
+    background:white;
+}
+
+.custom-table th{
+    background:#6fb0ff;
+    color:#000;
+    border:1px solid #5995de;
+    padding:8px;
+    text-align:center;
+    font-weight:bold;
+}
+
+.custom-table td {
+    background: #0b2847;
+    color: white;
+    border: 1px solid #2e3d4d;
+    padding: 7px 8px;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 250px;
+}
+
+.custom-table tbody tr:hover td{
+    background:#26364a;
+}
+
+.tanggal-divider td{
+    background:#D4A017 !important;
+    border:none !important;
+    padding:0 !important;
+    height:5px;
+    line-height:0;
+    font-size:0;
+}
+
+.center{
+    text-align:center;
+}
+
+.left{
+    text-align:left;
+}
+
+.right{
+    text-align:right;
+}
