@@ -555,7 +555,7 @@ def tambah_baris(
 def hapus_baris(daftar_hapus):
 
     if not daftar_hapus:
-        return
+        return 0
 
     client = get_client()
 
@@ -563,45 +563,78 @@ def hapus_baris(daftar_hapus):
         SPREADSHEET_ID
     )
 
-    # Kelompokkan berdasarkan sheet
+    # Kelompokkan baris berdasarkan nama sheet
     per_sheet = {}
 
     for item in daftar_hapus:
 
-        sheet_name = item.get("_sheet")
-        excel_row = item.get("_excel_row")
+        sheet_name = str(
+            item.get("_sheet", "")
+        ).strip()
+
+        row_number = item.get("_excel_row")
 
         if not sheet_name:
             raise ValueError(
                 "Nama sheet (_sheet) tidak ditemukan."
             )
 
-        if excel_row in (None, ""):
+        if row_number in (None, ""):
             raise ValueError(
                 "Nomor baris (_excel_row) tidak ditemukan."
+            )
+
+        row_number = int(float(row_number))
+
+        if row_number < 1:
+            raise ValueError(
+                f"Nomor baris tidak valid: {row_number}"
             )
 
         per_sheet.setdefault(
             sheet_name,
             []
-        ).append(int(excel_row))
+        ).append(row_number)
 
-    # Hapus dari setiap sheet
+    total_dihapus = 0
+
+    # Proses setiap sheet
     for sheet_name, rows in per_sheet.items():
 
         ws = sh.worksheet(sheet_name)
 
-        # Hilangkan duplikat
+        # Hilangkan duplikat dan urutkan dari bawah
+        # supaya nomor baris tidak berubah sebelum
+        # baris berikutnya dihapus.
         rows = sorted(
             set(rows),
             reverse=True
         )
 
+        requests = []
+
         for row_number in rows:
 
-            ws.delete_rows(
-                row_number
-            )
+            requests.append({
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": ws.id,
+                        "dimension": "ROWS",
+                        "startIndex": row_number - 1,
+                        "endIndex": row_number
+                    }
+                }
+            })
+
+        if requests:
+
+            sh.batch_update({
+                "requests": requests
+            })
+
+            total_dihapus += len(requests)
+
+    return total_dihapus
 
 # ==================================================
 # UPDATE / SIMPAN EDIT

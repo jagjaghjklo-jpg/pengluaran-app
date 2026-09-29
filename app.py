@@ -380,48 +380,26 @@ edited = editable_table(
 # ==================================================
 if edited and edited.get("action") == "delete":
 
-    st.write("DEBUG ACTION:", edited.get("action"))
-    st.write("DEBUG DATA:", edited.get("data"))
+    data_hapus = edited.get("data", [])
+
+    if not data_hapus:
+        st.error("Tidak ada data yang dipilih.")
+        st.stop()
 
     try:
 
-        data_hapus = edited.get("data", [])
-
-        if not data_hapus:
-            st.error("DATA HAPUS KOSONG.")
-            st.stop()
-
-        st.write(
-            "DEBUG JUMLAH DATA:",
-            len(data_hapus)
-        )
-
-        st.write(
-            "DEBUG SHEET:",
-            [
-                row.get("_sheet")
-                for row in data_hapus
-            ]
-        )
-
-        st.write(
-            "DEBUG BARIS:",
-            [
-                row.get("_excel_row")
-                for row in data_hapus
-            ]
-        )
-
-        hapus_baris(data_hapus)
-
-        st.success(
-            f"{len(data_hapus)} data berhasil dihapus."
+        jumlah_dihapus = hapus_baris(
+            data_hapus
         )
 
         st.cache_data.clear()
 
         st.session_state.table_version = (
             table_version + 1
+        )
+
+        st.success(
+            f"{jumlah_dihapus} data berhasil dihapus."
         )
 
         st.rerun()
@@ -431,7 +409,6 @@ if edited and edited.get("action") == "delete":
         st.error(
             f"GAGAL HAPUS: {type(e).__name__}: {e}"
         )
-
 # ==================================================
 # SIMPAN HASIL EDIT
 # ==================================================
