@@ -1,61 +1,149 @@
 import re
+
 import gspread
 import pandas as pd
-from google.oauth2.service_account import Credentials
 import streamlit as st
 
+from google.oauth2.service_account import Credentials
+
+
+# ==================================================
+# KONFIGURASI
+# ==================================================
 
 SPREADSHEET_ID = "1qxk8yNdkG7l_Zez6PUHWDzj_M4aj2HvSUtM0GRP2nXA"
 
 BULAN = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember"
 ]
 
 KOLOM_LENGKAP = [
-    "Tanggal", "Kategori", "Barang", "Harga", "Jumlah", "Subtotal", "Diskon"
+    "Tanggal",
+    "Kategori",
+    "Barang",
+    "Harga",
+    "Jumlah",
+    "Subtotal",
+    "Diskon"
 ]
 
 
+# ==================================================
+# GOOGLE SHEETS CLIENT
+# ==================================================
+
 def get_client():
+
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets"
+        ]
     )
+
     return gspread.authorize(creds)
 
 
+# ==================================================
+# LOAD DATA
+# ==================================================
+
+@st.cache_data(ttl=60)
 def load_data():
 
     client = get_client()
-    sh = client.open_by_key(SPREADSHEET_ID)
+
+    sh = client.open_by_key(
+        SPREADSHEET_ID
+    )
 
     semua = []
     gagal = []
 
-    tahun_match = re.search(r"(20\d{2})", sh.title)
-    tahun = int(tahun_match.group(1)) if tahun_match else None
+    # Ambil tahun dari nama spreadsheet
+    tahun_match = re.search(
+        r"(20\d{2})",
+        sh.title
+    )
+
+    tahun = (
+        int(tahun_match.group(1))
+        if tahun_match
+        else None
+    )
+
+
+    # ==================================================
+    # BACA SEMUA SHEET BULAN
+    # ==================================================
 
     for bulan in BULAN:
 
         try:
-            ws = sh.worksheet(bulan)
-            raw = pd.DataFrame(ws.get_all_values(value_render_option='UNFORMATTED_VALUE'))
 
-            if raw.dropna(how="all").empty or raw.empty:
+            ws = sh.worksheet(bulan)
+
+            raw = pd.DataFrame(
+                ws.get_all_values(
+                    value_render_option="UNFORMATTED_VALUE"
+                )
+            )
+
+
+            # Lewati sheet kosong
+            if raw.empty or raw.dropna(
+                how="all"
+            ).empty:
+
                 continue
+
+
+            # ==================================================
+            # CARI BARIS HEADER
+            # ==================================================
 
             baris_header = None
 
             for i in range(len(raw)):
-                nilai_baris = raw.iloc[i].astype(str).str.strip().tolist()
+
+                nilai_baris = (
+                    raw.iloc[i]
+                    .astype(str)
+                    .str.strip()
+                    .tolist()
+                )
+
                 if "Tanggal" in nilai_baris:
+
                     baris_header = i
+
                     break
 
+
             if baris_header is None:
-                gagal.append(f"{bulan} gagal dibaca: header 'Tanggal' tidak ditemukan")
+
+                gagal.append(
+                    f"{bulan} gagal dibaca: "
+                    "header 'Tanggal' tidak ditemukan"
+                )
+
                 continue
+
+
+            # ==================================================
+            # HEADER
+            # ==================================================
 
             header_asli = (
                 raw.iloc[baris_header]
@@ -64,102 +152,563 @@ def load_data():
                 .tolist()
             )
 
-            df = raw.iloc[baris_header + 1:].copy()
-            df.columns = header_asli[:df.shape[1]]
 
-            df = df.replace("", None)
+            # ==================================================
+            # DATA SETELAH HEADER
+            # ==================================================
+
+            df = raw.iloc[
+                baris_header + 1:
+            ].copy()
+
+
+            df.columns = header_asli[
+                :df.shape[1]
+            ]
+
+
+            df = df.replace(
+                "",
+                None
+            )
+
+
+            # ==================================================
+            # NORMALISASI NAMA KOLOM
+            # ==================================================
 
             def normalisasi(teks):
-                return re.sub(r"[^a-z0-9]", "", str(teks).lower())
+
+                return re.sub(
+                    r"[^a-z0-9]",
+                    "",
+                    str(teks).lower()
+                )
+
 
             mapping = {}
+
             for kolom_asli in df.columns:
-                asli_bersih = normalisasi(kolom_asli)
+
+                asli_bersih = normalisasi(
+                    kolom_asli
+                )
+
                 for kolom_standar in KOLOM_LENGKAP:
-                    standar_bersih = normalisasi(kolom_standar)
+
+                    standar_bersih = normalisasi(
+                        kolom_standar
+                    )
+
                     if standar_bersih in asli_bersih:
-                        mapping[kolom_asli] = kolom_standar
+
+                        mapping[
+                            kolom_asli
+                        ] = kolom_standar
+
                         break
 
-            df = df.rename(columns=mapping)
+
+            df = df.rename(
+                columns=mapping
+            )
+
+
+            # ==================================================
+            # PASTIKAN SEMUA KOLOM ADA
+            # ==================================================
 
             for kolom in KOLOM_LENGKAP:
+
                 if kolom not in df.columns:
+
                     df[kolom] = None
 
-            df = df[KOLOM_LENGKAP]
 
-            df["_excel_row"] = df.index + baris_header + 2
+            df = df[
+                KOLOM_LENGKAP
+            ]
+
+
+            # ==================================================
+            # SIMPAN POSISI BARIS GOOGLE SHEETS
+            # ==================================================
+
+            df["_excel_row"] = (
+                df.index
+                + baris_header
+                + 2
+            )
+
             df["_sheet"] = bulan
 
-            kolom_cek = ["Kategori", "Barang", "Harga", "Jumlah", "Subtotal"]
-            df = df[df[kolom_cek].notna().any(axis=1)].copy()
 
-            df["Tanggal"] = df["Tanggal"].ffill()
-            df = df[df[kolom_cek].notna().any(axis=1)].copy()
+            # ==================================================
+            # HAPUS BARIS KOSONG
+            # ==================================================
+
+            kolom_cek = [
+                "Kategori",
+                "Barang",
+                "Harga",
+                "Jumlah",
+                "Subtotal"
+            ]
+
+            df = df[
+                df[kolom_cek]
+                .notna()
+                .any(axis=1)
+            ].copy()
+
+
+            # ==================================================
+            # ISI TANGGAL KE BAWAH
+            # ==================================================
+
+            df["Tanggal"] = (
+                df["Tanggal"]
+                .ffill()
+            )
+
+
+            df = df[
+                df[kolom_cek]
+                .notna()
+                .any(axis=1)
+            ].copy()
+
+
+            # ==================================================
+            # TAMBAH BULAN & TAHUN
+            # ==================================================
 
             df["Bulan"] = bulan
+
             df["Tahun"] = tahun
+
 
             semua.append(df)
 
+
         except Exception as e:
-            gagal.append(f"{bulan} gagal dibaca: {e}")
+
+            gagal.append(
+                f"{bulan} gagal dibaca: {e}"
+            )
+
+
+    # ==================================================
+    # JIKA TIDAK ADA DATA
+    # ==================================================
 
     if len(semua) == 0:
-        return pd.DataFrame(), gagal
 
-    hasil = pd.concat(semua, ignore_index=True)
+        return (
+            pd.DataFrame(),
+            gagal
+        )
 
-    hasil["Harga"] = pd.to_numeric(hasil["Harga"], errors="coerce")
-    hasil["Jumlah"] = pd.to_numeric(hasil["Jumlah"], errors="coerce")
-    hasil["Subtotal"] = pd.to_numeric(hasil["Subtotal"], errors="coerce")
-    hasil["Diskon"] = pd.to_numeric(hasil["Diskon"], errors="coerce")
 
-    hasil["Kategori"] = hasil["Kategori"].astype(str).str.strip().str.title()
-    hasil["Barang"] = hasil["Barang"].astype(str).str.strip()
-    hasil["Tanggal"] = hasil["Tanggal"].astype(str).str.strip()
+    # ==================================================
+    # GABUNG SEMUA BULAN
+    # ==================================================
 
-    hasil["Kategori"] = hasil["Kategori"].replace("Nan", "")
-    hasil["Barang"] = hasil["Barang"].replace("nan", "")
+    hasil = pd.concat(
+        semua,
+        ignore_index=True
+    )
+
+
+    # ==================================================
+    # KONVERSI ANGKA
+    # ==================================================
+
+    hasil["Harga"] = pd.to_numeric(
+        hasil["Harga"],
+        errors="coerce"
+    )
+
+    hasil["Jumlah"] = pd.to_numeric(
+        hasil["Jumlah"],
+        errors="coerce"
+    )
+
+    hasil["Subtotal"] = pd.to_numeric(
+        hasil["Subtotal"],
+        errors="coerce"
+    )
+
+    hasil["Diskon"] = pd.to_numeric(
+        hasil["Diskon"],
+        errors="coerce"
+    )
+
+
+    # ==================================================
+    # BERSIHKAN TEXT
+    # ==================================================
+
+    hasil["Kategori"] = (
+        hasil["Kategori"]
+        .astype(str)
+        .str.strip()
+        .str.title()
+    )
+
+    hasil["Barang"] = (
+        hasil["Barang"]
+        .astype(str)
+        .str.strip()
+    )
+
+    hasil["Tanggal"] = (
+        hasil["Tanggal"]
+        .astype(str)
+        .str.strip()
+    )
+
+
+    hasil["Kategori"] = (
+        hasil["Kategori"]
+        .replace("Nan", "")
+    )
+
+    hasil["Barang"] = (
+        hasil["Barang"]
+        .replace("nan", "")
+    )
+
+
+    # ==================================================
+    # HAPUS BARIS TOTAL
+    # ==================================================
 
     hasil = hasil[
         ~hasil.apply(
-            lambda row: row.astype(str).str.upper().str.contains("TOTAL").any(),
+            lambda row:
+                row.astype(str)
+                .str.upper()
+                .str.contains("TOTAL")
+                .any(),
             axis=1
         )
     ].reset_index(drop=True)
 
-    hasil = hasil[[
-        "Tahun", "Bulan", "Tanggal", "Kategori", "Barang",
-        "Harga", "Jumlah", "Subtotal", "Diskon", "_sheet", "_excel_row"
-    ]]
+
+    # ==================================================
+    # URUTAN KOLOM
+    # ==================================================
+
+    hasil = hasil[
+        [
+            "Tahun",
+            "Bulan",
+            "Tanggal",
+            "Kategori",
+            "Barang",
+            "Harga",
+            "Jumlah",
+            "Subtotal",
+            "Diskon",
+            "_sheet",
+            "_excel_row"
+        ]
+    ]
+
 
     return hasil, gagal
 
 
-def tambah_baris(bulan, tanggal, kategori, barang, harga, jumlah, subtotal):
+# ==================================================
+# TAMBAH BARIS
+# ==================================================
+
+def tambah_baris(
+    bulan,
+    tanggal,
+    kategori,
+    barang,
+    harga,
+    jumlah,
+    subtotal
+):
 
     client = get_client()
-    ws = client.open_by_key(SPREADSHEET_ID).worksheet(bulan)
 
-    diskon = max((harga * jumlah) - subtotal, 0)
+    ws = (
+        client
+        .open_by_key(SPREADSHEET_ID)
+        .worksheet(bulan)
+    )
 
-    ws.append_row([tanggal, kategori, barang, harga, jumlah, subtotal, diskon])
+
+    # Hitung diskon
+    diskon = max(
+        (harga * jumlah) - subtotal,
+        0
+    )
 
 
-def hapus_baris(daftar_hapus):
+    ws.append_row(
+        [
+            tanggal,
+            kategori,
+            barang,
+            harga,
+            jumlah,
+            subtotal,
+            diskon
+        ]
+    )
+
+
+# ==================================================
+# HAPUS BARIS
+# ==================================================
+
+def hapus_baris(
+    daftar_hapus
+):
 
     client = get_client()
-    sh = client.open_by_key(SPREADSHEET_ID)
+
+    sh = client.open_by_key(
+        SPREADSHEET_ID
+    )
+
+
+    # Kelompokkan berdasarkan sheet
+    per_sheet = {}
+
+    for item in daftar_hapus:
+
+        sheet = item["_sheet"]
+
+        baris = int(
+            item["_excel_row"]
+        )
+
+        per_sheet.setdefault(
+            sheet,
+            []
+        ).append(baris)
+
+
+    # Hapus dari bawah ke atas
+    for sheet_name, daftar_baris in per_sheet.items():
+
+        ws = sh.worksheet(
+            sheet_name
+        )
+
+
+        for baris in sorted(
+            daftar_baris,
+            reverse=True
+        ):
+
+            ws.delete_rows(
+                baris
+            )
+
+
+# ==================================================
+# UPDATE / SIMPAN EDIT
+# ==================================================
+
+def update_baris(
+    data_edit
+):
+
+    client = get_client()
+
+    sh = client.open_by_key(
+        SPREADSHEET_ID
+    )
+
+
+    # ==================================================
+    # KELOMPOKKAN BERDASARKAN SHEET
+    # ==================================================
 
     per_sheet = {}
-    for item in daftar_hapus:
-        sheet = item["_sheet"]
-        baris = int(item["_excel_row"])
-        per_sheet.setdefault(sheet, []).append(baris)
 
-    for sheet_name, daftar_baris in per_sheet.items():
-        ws = sh.worksheet(sheet_name)
-        for baris in sorted(daftar_baris, reverse=True):
-            ws.delete_rows(baris)
+    for row in data_edit:
+
+        sheet_name = row["_sheet"]
+
+        per_sheet.setdefault(
+            sheet_name,
+            []
+        ).append(row)
+
+
+    # ==================================================
+    # UPDATE SETIAP SHEET
+    # ==================================================
+
+    for sheet_name, rows in per_sheet.items():
+
+        ws = sh.worksheet(
+            sheet_name
+        )
+
+
+        for row in rows:
+
+            excel_row = int(
+                row["_excel_row"]
+            )
+
+
+            # ==================================================
+            # TANGGAL
+            # ==================================================
+
+            tanggal = str(
+                row.get(
+                    "Tanggal",
+                    ""
+                )
+            ).strip()
+
+
+            # ==================================================
+            # KATEGORI
+            # ==================================================
+
+            kategori = row.get(
+                "Kategori",
+                ""
+            )
+
+
+            # ==================================================
+            # BARANG
+            # ==================================================
+
+            barang = row.get(
+                "Barang",
+                ""
+            )
+
+
+            # ==================================================
+            # HARGA
+            # ==================================================
+
+            try:
+
+                harga = float(
+                    str(
+                        row.get(
+                            "Harga",
+                            "0"
+                        )
+                    )
+                    .replace(
+                        ".",
+                        ""
+                    )
+                    .replace(
+                        ",",
+                        ""
+                    )
+                    .strip()
+                )
+
+            except (
+                ValueError,
+                TypeError
+            ):
+
+                harga = 0
+
+
+            # ==================================================
+            # JUMLAH
+            # ==================================================
+
+            try:
+
+                jumlah = float(
+                    str(
+                        row.get(
+                            "Jumlah",
+                            "1"
+                        )
+                    )
+                    .replace(
+                        ",",
+                        "."
+                    )
+                    .strip()
+                )
+
+            except (
+                ValueError,
+                TypeError
+            ):
+
+                jumlah = 1
+
+
+            # ==================================================
+            # SUBTOTAL
+            # ==================================================
+
+            try:
+
+                subtotal = float(
+                    str(
+                        row.get(
+                            "Subtotal",
+                            "0"
+                        )
+                    )
+                    .replace(
+                        ".",
+                        ""
+                    )
+                    .replace(
+                        ",",
+                        ""
+                    )
+                    .strip()
+                )
+
+            except (
+                ValueError,
+                TypeError
+            ):
+
+                subtotal = 0
+
+
+            # ==================================================
+            # HITUNG DISKON
+            # ==================================================
+
+            diskon = max(
+                (harga * jumlah) - subtotal,
+                0
+            )
+
+
+            # ==================================================
+            # UPDATE A:G
+            # ==================================================
+
+            ws.update(
+                f"A{excel_row}:G{excel_row}",
+                [[
+                    tanggal,
+                    kategori,
+                    barang,
+                    harga,
+                    jumlah,
+                    subtotal,
+                    diskon
+                ]]
+            )

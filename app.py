@@ -4,15 +4,19 @@ import pandas as pd
 import numpy as np
 import os
 import re
-import streamlit.components.v1 as components
 
-from utils.sheets import load_data, tambah_baris, hapus_baris
+from utils.sheets import (
+    load_data,
+    tambah_baris,
+    hapus_baris,
+    update_baris
+)
+
 from utils.format import rupiah
-from openpyxl import load_workbook
 
 
 # ==================================================
-# KONFIGURASI
+# KONFIGURASI COMPONENT
 # ==================================================
 
 editable_table = components.declare_component(
@@ -20,6 +24,10 @@ editable_table = components.declare_component(
     path="components/editable_table"
 )
 
+
+# ==================================================
+# KONFIGURASI STREAMLIT
+# ==================================================
 
 st.set_page_config(
     page_title="Dashboard Pengeluaran",
@@ -45,7 +53,8 @@ with open("assets/style.css") as f:
 df, errors = load_data()
 
 if errors:
-    st.warning("\n".join(errors) )
+    st.warning("\n".join(errors))
+
 
 # ==================================================
 # BERSIHKAN DATA
@@ -54,14 +63,22 @@ if errors:
 df = df[
     df["Tanggal"].astype(str).str.strip() != "Tanggal"
 ].reset_index(drop=True)
+
 df = df[
     ~df.apply(
-        lambda row: row.astype(str).str.upper().str.contains("TOTAL").any(),
+        lambda row: row.astype(str)
+        .str.upper()
+        .str.contains("TOTAL")
+        .any(),
         axis=1
     )
 ].reset_index(drop=True)
 
-# Pastikan kolom angka benar-benar numerik
+
+# ==================================================
+# PASTIKAN KOLOM ANGKA NUMERIK
+# ==================================================
+
 df["Harga"] = pd.to_numeric(
     df["Harga"],
     errors="coerce"
@@ -77,53 +94,89 @@ df["Subtotal"] = pd.to_numeric(
     errors="coerce"
 ).fillna(0)
 
+
 # ==================================================
 # HITUNG DISKON
-# Harga = harga asli per unit
-# Subtotal = harga akhir x jumlah
-# Diskon = harga asli total - subtotal
 # ==================================================
-
-
-df["Subtotal"] = pd.to_numeric(
-    df["Subtotal"],
-    errors="coerce"
-)
-
-df["Subtotal"] = df["Subtotal"].fillna(0)
 
 df["Diskon"] = (
     (df["Harga"] * df["Jumlah"])
     - df["Subtotal"]
 ).clip(lower=0)
 
+
 # ==================================================
 # URUTAN BULAN
 # ==================================================
 
 urutan_bulan = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember"
 ]
 
+
 # ==================================================
-# JUDUL
+# TAMBAH PENGELUARAN
 # ==================================================
 
 with st.expander("+ Tambah Pengeluaran"):
+
     with st.form("form_tambah_pengeluaran"):
 
-        bulan_input = st.selectbox("Bulan", urutan_bulan)
-        tanggal_input = st.number_input("Tanggal", min_value=1, max_value=31, step=1)
-        kategori_input = st.text_input("Kategori")
-        barang_input = st.text_input("Nama Barang")
-        harga_input = st.number_input("Harga", min_value=0, step=500)
-        jumlah_input = st.number_input("Jumlah", min_value=1, step=1)
-        subtotal_input = st.number_input("Subtotal (setelah diskon)", min_value=0, step=500)
+        bulan_input = st.selectbox(
+            "Bulan",
+            urutan_bulan
+        )
 
-        submit = st.form_submit_button("Simpan")
+        tanggal_input = st.number_input(
+            "Tanggal",
+            min_value=1,
+            max_value=31,
+            step=1
+        )
+
+        kategori_input = st.text_input(
+            "Kategori"
+        )
+
+        barang_input = st.text_input(
+            "Nama Barang"
+        )
+
+        harga_input = st.number_input(
+            "Harga",
+            min_value=0,
+            step=500
+        )
+
+        jumlah_input = st.number_input(
+            "Jumlah",
+            min_value=1,
+            step=1
+        )
+
+        subtotal_input = st.number_input(
+            "Subtotal (setelah diskon)",
+            min_value=0,
+            step=500
+        )
+
+        submit = st.form_submit_button(
+            "Simpan"
+        )
 
         if submit:
+
             tambah_baris(
                 bulan_input,
                 tanggal_input,
@@ -133,7 +186,15 @@ with st.expander("+ Tambah Pengeluaran"):
                 jumlah_input,
                 subtotal_input
             )
-            st.success("Data berhasil ditambahkan!")
+
+            st.success(
+                "Data berhasil ditambahkan!"
+            )
+
+            # Bersihkan cache supaya data terbaru
+            # langsung diambil dari Google Sheets
+            st.cache_data.clear()
+
             st.rerun()
 
 
@@ -154,9 +215,11 @@ pilih_bulan = st.sidebar.selectbox(
 
 
 if pilih_bulan == "Semua":
+
     hasil_bulan = df.copy()
 
 else:
+
     hasil_bulan = df[
         df["Bulan"] == pilih_bulan
     ].copy()
@@ -180,9 +243,11 @@ pilih_kategori = st.sidebar.selectbox(
 
 
 if pilih_kategori == "Semua":
+
     hasil = hasil_bulan.copy()
 
 else:
+
     hasil = hasil_bulan[
         hasil_bulan["Kategori"] == pilih_kategori
     ].copy()
@@ -202,10 +267,17 @@ if pilih_kategori != "Semua":
 
 
 if judul:
-    st.subheader(" - ".join(judul))
+
+    st.subheader(
+        " - ".join(judul)
+    )
 
 else:
-    st.subheader("Semua Pengeluaran")
+
+    st.subheader(
+        "Semua Pengeluaran"
+    )
+
 
 # ==================================================
 # TOTAL
@@ -235,6 +307,7 @@ c3.metric(
     )
 )
 
+
 # ==================================================
 # TABEL UTAMA
 # ==================================================
@@ -249,235 +322,106 @@ kolom_tabel = [
     "Diskon"
 ]
 
+
+# Tampilkan Bulan jika memilih Semua
 if pilih_bulan == "Semua":
+
     kolom_tabel = [
         "Bulan"
     ] + kolom_tabel
 
+
 data_tabel = hasil[
-    kolom_tabel + ["_sheet", "_excel_row"]
+    kolom_tabel + [
+        "_sheet",
+        "_excel_row"
+    ]
 ].copy()
 
-# Ubah NaN menjadi string kosong
+
+# ==================================================
+# BERSIHKAN NILAI KOSONG
+# ==================================================
+
 data_tabel = data_tabel.fillna("")
 
-# Data yang dikirim ke component
-records = data_tabel.to_dict("records")
+
+# ==================================================
+# UBAH DATA MENJADI RECORD
+# ==================================================
+
+records = data_tabel.to_dict(
+    "records"
+)
+
+
+# ==================================================
+# VERSI TABLE
+# ==================================================
 
 table_version = st.session_state.get(
     "table_version",
     0
 )
 
+
+# ==================================================
+# EDITABLE TABLE
+# ==================================================
+
 edited = editable_table(
     data=records,
     key=f"editable_table_{table_version}"
 )
 
+
+# ==================================================
+# HAPUS BARIS
+# ==================================================
+
 if edited and edited.get("action") == "delete":
 
-    hapus_baris(edited["data"])
-
-    st.success("Data berhasil dihapus.")
-
-    st.session_state.table_version = (
-        table_version + 1
-    )
-
-    st.rerun()
-
-    wb = load_workbook(
-        "data/pengeluaran_2026.xlsx"
-    )
-
-    for row in data_edit:
-
-        sheet_name = row["_sheet"]
-        excel_row = int(row["_excel_row"])
-
-        ws = wb[sheet_name]
-
-        # ------------------------------
-        # Tanggal
-        # ------------------------------
-
-        tanggal = str(
-            row.get("Tanggal", "")
-        ).strip()
-
-        if tanggal == "":
-            ws.cell(
-                excel_row,
-                1
-            ).value = None
-        else:
-            try:
-                ws.cell(
-                    excel_row,
-                    1
-                ).value = int(float(tanggal))
-            except:
-                ws.cell(
-                    excel_row,
-                    1
-                ).value = tanggal
-
-        # ------------------------------
-        # Kategori
-        # ------------------------------
-
-        ws.cell(
-            excel_row,
-            2
-        ).value = row.get(
-            "Kategori",
-            ""
-        )
-
-        # ------------------------------
-        # Barang
-        # ------------------------------
-
-        ws.cell(
-            excel_row,
-            3
-        ).value = row.get(
-            "Barang",
-            ""
-        )
-
-        # ------------------------------
-        # Harga
-        # ------------------------------
-
-        harga_text = str(
-            row.get("Harga", "")
-        )
-
-        harga_text = (
-            harga_text
-            .replace(".", "")
-            .replace(",", "")
-            .strip()
-        )
-
-        if harga_text == "":
-            harga = None
-        else:
-            harga = float(harga_text)
-
-        ws.cell(
-            excel_row,
-            4
-        ).value = harga
-
-        # ------------------------------
-        # Jumlah
-        # ------------------------------
-
-        jumlah_text = str(
-            row.get("Jumlah", "")
-        ).strip()
-
-        if jumlah_text == "":
-            jumlah = None
-        else:
-            jumlah = float(
-                jumlah_text.replace(",", ".")
-            )
-
-        ws.cell(
-            excel_row,
-            5
-        ).value = jumlah
-
-        # ------------------------------
-        # Subtotal
-        # ------------------------------
-
-        subtotal_text = str(
-            row.get("Subtotal", "")
-        )
-
-        subtotal_text = (
-            subtotal_text
-            .replace(".", "")
-            .replace(",", "")
-            .strip()
-        )
-
-        if subtotal_text == "":
-            subtotal = None
-        else:
-            subtotal = float(subtotal_text)
-
-        ws.cell(
-            excel_row,
-            6
-        ).value = subtotal
-
-        # ------------------------------
-        # Diskon
-        # ------------------------------
-
-        if (
-            harga is not None
-            and jumlah is not None
-            and subtotal is not None
-        ):
-
-            diskon = (
-                harga * jumlah
-            ) - subtotal
-
-            diskon = max(
-                diskon,
-                0
-            )
-
-        else:
-            diskon = None
-
-        ws.cell(
-            excel_row,
-            7
-        ).value = diskon
-
-    wb.save(
-        "data/pengeluaran_2026.xlsx"
+    hapus_baris(
+        edited["data"]
     )
 
     st.success(
-        "Perubahan berhasil disimpan ke Excel."
+        "Data berhasil dihapus."
     )
 
+    # Bersihkan cache Google Sheets
+    st.cache_data.clear()
+
+    # Ganti key table supaya component
+    # mengambil data terbaru
     st.session_state.table_version = (
         table_version + 1
     )
 
     st.rerun()
-    
-# ===== =============================================
-# TABEL UTAMA
+
+
+# ==================================================
+# SIMPAN HASIL EDIT
 # ==================================================
 
-kolom_tabel = [
-    "Tanggal",
-    "Kategori",
-    "Barang",
-    "Harga",
-    "Jumlah",
-    "Subtotal",
-    "Diskon"
-]
+if edited and edited.get("action") == "save":
 
-# Tampilkan Bulan jika semua bulan dipilih
-if pilih_bulan == "Semua":
-    kolom_tabel = [
-        "Bulan"
-    ] + kolom_tabel
+    update_baris(
+        edited["data"]
+    )
 
+    st.success(
+        "Perubahan berhasil disimpan."
+    )
 
+    # Bersihkan cache Google Sheets
+    st.cache_data.clear()
 
+    # Ganti key table supaya component
+    # mengambil data terbaru
+    st.session_state.table_version = (
+        table_version + 1
+    )
 
-
+    st.rerun()

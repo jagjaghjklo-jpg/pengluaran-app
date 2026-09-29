@@ -1,6 +1,6 @@
 import pandas as pd
 
-FILE = "data/pengeluaran_2026.xlsx"
+FILE = "home/moonpool/pengeluaran-app/data/pengeluaran_2026.xlsx"
 
 BULAN = [
     "Januari",
