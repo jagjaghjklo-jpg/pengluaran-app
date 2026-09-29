@@ -395,7 +395,6 @@ if edited and edited.get("action") == "delete":
 
         st.success("Perintah DELETE berhasil dikirim ke Google Sheets.")
 
-        st.cache_data.clear()
 
         st.session_state.table_version = (
             table_version + 1

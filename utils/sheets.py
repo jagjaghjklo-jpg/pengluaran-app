@@ -277,7 +277,7 @@ def proses_sheet(
 # LOAD DATA
 # ==================================================
 
-@st.cache_data(ttl=60)
+
 def load_data():
 
     client = get_client()
