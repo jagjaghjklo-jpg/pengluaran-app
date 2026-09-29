@@ -460,25 +460,17 @@ def hapus_baris(daftar_hapus):
 
         baris_per_sheet.setdefault(sheet_name, set()).add(row_number)
 
-    # Buat satu permintaan API, urut menurun per sheet.
-    requests = []
-
+    # Hapus melalui worksheet.delete_rows milik gspread. Hapus dari nomor
+    # baris terbesar ke terkecil agar penghapusan sebelumnya tidak menggeser
+    # posisi baris yang belum dihapus.
+    hasil = []
     for sheet_name, row_numbers in baris_per_sheet.items():
         ws = sh.worksheet(sheet_name)
-
         for row_number in sorted(row_numbers, reverse=True):
-            requests.append({
-                "deleteDimension": {
-                    "range": {
-                        "sheetId": ws.id,
-                        "dimension": "ROWS",
-                        "startIndex": row_number - 1,
-                        "endIndex": row_number,
-                    }
-                }
-            })
+            ws.delete_rows(row_number)
+            hasil.append({"sheet": sheet_name, "row": row_number})
 
-    return sh.batch_update({"requests": requests})
+    return hasil
 
 
 # ==================================================

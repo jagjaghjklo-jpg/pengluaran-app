@@ -32,6 +32,9 @@ with open("assets/style.css") as f:
 # Baca data dari Google Sheets
 df, errors = load_data()
 
+if st.session_state.get("delete_notice"):
+    st.success(st.session_state.pop("delete_notice"))
+
 if errors:
     st.warning("\n".join(errors))
 
@@ -220,7 +223,10 @@ def hapus_dan_refresh(data_hapus):
         return
 
     try:
-        hapus_baris(data_hapus)
+        terhapus = hapus_baris(data_hapus)
+        st.session_state["delete_notice"] = (
+            f"Berhasil menghapus {len(terhapus)} baris dari Google Sheets."
+        )
         st.session_state["table_version"] = table_version + 1
         st.rerun()
     except Exception as e:
@@ -230,36 +236,6 @@ def hapus_dan_refresh(data_hapus):
 # Jalur hapus dari tombol di dalam custom table
 if edited and edited.get("action") == "delete":
     hapus_dan_refresh(edited.get("data", []))
-
-
-# Jalur hapus dari tombol native Streamlit
-indeks_hapus = st.multiselect(
-    "Pilih transaksi yang akan dihapus",
-    options=list(range(len(records))),
-    format_func=lambda i: (
-        f"{i + 1}. "
-        f"{records[i].get('Bulan', '')} | "
-        f"{records[i].get('Tanggal', '')} | "
-        f"{records[i].get('Kategori', '')} | "
-        f"{records[i].get('Barang', '')} | "
-        f"baris Sheet {records[i].get('_excel_row', '')}"
-    ),
-    key=f"pilihan_hapus_{table_version}",
-)
-
-konfirmasi_hapus = st.checkbox(
-    "Saya yakin ingin menghapus transaksi terpilih",
-    key=f"konfirmasi_hapus_{table_version}",
-)
-
-if st.button(
-    "Hapus transaksi terpilih",
-    type="primary",
-    disabled=not indeks_hapus or not konfirmasi_hapus,
-    key=f"hapus_transaksi_{table_version}",
-):
-    data_hapus = [records[i] for i in indeks_hapus]
-    hapus_dan_refresh(data_hapus)
 
 
 # Simpan hasil edit dari custom table
