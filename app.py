@@ -383,23 +383,22 @@ if edited and edited.get("action") == "delete":
     data_hapus = edited.get("data", [])
 
     if not data_hapus:
-        st.error("Tidak ada data yang dipilih.")
+        st.error("Data hapus kosong.")
         st.stop()
 
     try:
 
-        jumlah_dihapus = hapus_baris(
-            data_hapus
-        )
+        hasil_hapus = hapus_baris(data_hapus)
+
+        for pesan in hasil_hapus:
+            st.write(pesan)
+
+        st.success("Perintah DELETE berhasil dikirim ke Google Sheets.")
 
         st.cache_data.clear()
 
         st.session_state.table_version = (
             table_version + 1
-        )
-
-        st.success(
-            f"{jumlah_dihapus} data berhasil dihapus."
         )
 
         st.rerun()

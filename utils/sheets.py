@@ -555,16 +555,13 @@ def tambah_baris(
 def hapus_baris(daftar_hapus):
 
     if not daftar_hapus:
-        return 0
+        raise ValueError("daftar_hapus kosong")
 
     client = get_client()
 
-    sh = client.open_by_key(
-        SPREADSHEET_ID
-    )
+    sh = client.open_by_key(SPREADSHEET_ID)
 
-    # Kelompokkan baris berdasarkan nama sheet
-    per_sheet = {}
+    hasil = []
 
     for item in daftar_hapus:
 
@@ -575,66 +572,54 @@ def hapus_baris(daftar_hapus):
         row_number = item.get("_excel_row")
 
         if not sheet_name:
-            raise ValueError(
-                "Nama sheet (_sheet) tidak ditemukan."
-            )
+            raise ValueError("_sheet kosong")
 
         if row_number in (None, ""):
-            raise ValueError(
-                "Nomor baris (_excel_row) tidak ditemukan."
-            )
+            raise ValueError("_excel_row kosong")
 
         row_number = int(float(row_number))
 
-        if row_number < 1:
-            raise ValueError(
-                f"Nomor baris tidak valid: {row_number}"
-            )
-
-        per_sheet.setdefault(
-            sheet_name,
-            []
-        ).append(row_number)
-
-    total_dihapus = 0
-
-    # Proses setiap sheet
-    for sheet_name, rows in per_sheet.items():
-
         ws = sh.worksheet(sheet_name)
 
-        # Hilangkan duplikat dan urutkan dari bawah
-        # supaya nomor baris tidak berubah sebelum
-        # baris berikutnya dihapus.
-        rows = sorted(
-            set(rows),
-            reverse=True
+        # Baca data sebelum dihapus
+        sebelum = ws.get(
+            f"A{row_number}:G{row_number}"
         )
 
-        requests = []
+        hasil.append(
+            f"SEBELUM: {sheet_name} baris {row_number} = {sebelum}"
+        )
 
-        for row_number in rows:
-
-            requests.append({
-                "deleteDimension": {
-                    "range": {
-                        "sheetId": ws.id,
-                        "dimension": "ROWS",
-                        "startIndex": row_number - 1,
-                        "endIndex": row_number
+        # Perintah hapus
+        response = sh.batch_update({
+            "requests": [
+                {
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": ws.id,
+                            "dimension": "ROWS",
+                            "startIndex": row_number - 1,
+                            "endIndex": row_number
+                        }
                     }
                 }
-            })
+            ]
+        })
 
-        if requests:
+        hasil.append(
+            f"API DELETE RESPONSE: {response}"
+        )
 
-            sh.batch_update({
-                "requests": requests
-            })
+        # Cek posisi yang sama setelah penghapusan
+        sesudah = ws.get(
+            f"A{row_number}:G{row_number}"
+        )
 
-            total_dihapus += len(requests)
+        hasil.append(
+            f"SESUDAH: {sheet_name} baris {row_number} = {sesudah}"
+        )
 
-    return total_dihapus
+    return hasil
 
 # ==================================================
 # UPDATE / SIMPAN EDIT
