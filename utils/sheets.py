@@ -494,6 +494,7 @@ def update_baris(data_edit):
     for sheet_name, rows in per_sheet.items():
 
         ws = sh.worksheet(sheet_name)
+        updates = []
 
         for row in rows:
 
@@ -534,9 +535,9 @@ def update_baris(data_edit):
 
             diskon = max((harga * jumlah) - subtotal, 0)
 
-            ws.update(
-                f"A{excel_row}:G{excel_row}",
-                [[
+            updates.append({
+                "range": f"A{excel_row}:G{excel_row}",
+                "values": [[
                     tanggal,
                     kategori,
                     barang,
@@ -545,4 +546,9 @@ def update_baris(data_edit):
                     subtotal,
                     diskon,
                 ]],
-            )
+            })
+
+        # Satu permintaan tulis per tab, bukan satu permintaan per baris.
+        # Ini mencegah kuota Sheets terlampaui saat tabel berisi banyak baris.
+        if updates:
+            ws.batch_update(updates, value_input_option="USER_ENTERED")
