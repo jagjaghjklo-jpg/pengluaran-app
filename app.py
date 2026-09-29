@@ -378,28 +378,37 @@ edited = editable_table(
 # ==================================================
 # HAPUS BARIS
 # ==================================================
-
 if edited and edited.get("action") == "delete":
 
-    hapus_baris(
-        edited["data"]
-    )
+    try:
 
-    st.success(
-        "Data berhasil dihapus."
-    )
+        data_hapus = edited.get("data", [])
 
-    # Bersihkan cache Google Sheets
-    st.cache_data.clear()
+        if not data_hapus:
+            st.warning("Tidak ada data yang dipilih.")
+            st.stop()
 
-    # Ganti key table supaya component
-    # mengambil data terbaru
-    st.session_state.table_version = (
-        table_version + 1
-    )
+        hapus_baris(data_hapus)
 
-    st.rerun()
+        # Bersihkan cache setelah Google Sheets
+        # benar-benar menerima penghapusan
+        st.cache_data.clear()
 
+        st.session_state.table_version = (
+            table_version + 1
+        )
+
+        st.success(
+            f"{len(data_hapus)} data berhasil dihapus."
+        )
+
+        st.rerun()
+
+    except Exception as e:
+
+        st.error(
+            f"Gagal menghapus data: {e}"
+        )
 
 # ==================================================
 # SIMPAN HASIL EDIT

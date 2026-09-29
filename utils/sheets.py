@@ -551,9 +551,11 @@ def tambah_baris(
 # HAPUS BARIS
 # ==================================================
 
-def hapus_baris(
-    daftar_hapus,
-):
+
+def hapus_baris(daftar_hapus):
+
+    if not daftar_hapus:
+        return
 
     client = get_client()
 
@@ -561,41 +563,45 @@ def hapus_baris(
         SPREADSHEET_ID
     )
 
-
     # Kelompokkan berdasarkan sheet
     per_sheet = {}
 
     for item in daftar_hapus:
 
-        sheet = item["_sheet"]
+        sheet_name = item.get("_sheet")
+        excel_row = item.get("_excel_row")
 
-        baris = int(
-            item["_excel_row"]
-        )
-
-        per_sheet.setdefault(
-            sheet,
-            [],
-        ).append(baris)
-
-
-    # Hapus dari bawah ke atas
-    for sheet_name, daftar_baris in per_sheet.items():
-
-        ws = sh.worksheet(
-            sheet_name
-        )
-
-
-        for baris in sorted(
-            daftar_baris,
-            reverse=True,
-        ):
-
-            ws.delete_rows(
-                baris
+        if not sheet_name:
+            raise ValueError(
+                "Nama sheet (_sheet) tidak ditemukan."
             )
 
+        if excel_row in (None, ""):
+            raise ValueError(
+                "Nomor baris (_excel_row) tidak ditemukan."
+            )
+
+        per_sheet.setdefault(
+            sheet_name,
+            []
+        ).append(int(excel_row))
+
+    # Hapus dari setiap sheet
+    for sheet_name, rows in per_sheet.items():
+
+        ws = sh.worksheet(sheet_name)
+
+        # Hilangkan duplikat
+        rows = sorted(
+            set(rows),
+            reverse=True
+        )
+
+        for row_number in rows:
+
+            ws.delete_rows(
+                row_number
+            )
 
 # ==================================================
 # UPDATE / SIMPAN EDIT
