@@ -79,8 +79,6 @@ def proses_sheet(
     tahun,
 ):
 
-    semua = []
-
     # --------------------------------------------------
     # Sheet kosong
     # --------------------------------------------------
@@ -90,9 +88,7 @@ def proses_sheet(
 
     raw = pd.DataFrame(raw)
 
-    if raw.empty or raw.dropna(
-        how="all"
-    ).empty:
+    if raw.empty or raw.dropna(how="all").empty:
         return None
 
 
@@ -137,24 +133,17 @@ def proses_sheet(
     # Ambil data setelah header
     # --------------------------------------------------
 
-    df = raw.iloc[
-        baris_header + 1:
-    ].copy()
+    df = raw.iloc[baris_header + 1:].copy()
 
 
     if df.empty:
         return None
 
 
-    df.columns = header_asli[
-        :df.shape[1]
-    ]
+    df.columns = header_asli[:df.shape[1]]
 
 
-    df = df.replace(
-        "",
-        None,
-    )
+    df = df.replace("", None)
 
 
     # --------------------------------------------------
@@ -165,28 +154,20 @@ def proses_sheet(
 
     for kolom_asli in df.columns:
 
-        asli_bersih = normalisasi(
-            kolom_asli
-        )
+        asli_bersih = normalisasi(kolom_asli)
 
         for kolom_standar in KOLOM_LENGKAP:
 
-            standar_bersih = normalisasi(
-                kolom_standar
-            )
+            standar_bersih = normalisasi(kolom_standar)
 
             if standar_bersih in asli_bersih:
 
-                mapping[
-                    kolom_asli
-                ] = kolom_standar
+                mapping[kolom_asli] = kolom_standar
 
                 break
 
 
-    df = df.rename(
-        columns=mapping
-    )
+    df = df.rename(columns=mapping)
 
 
     # --------------------------------------------------
@@ -200,21 +181,14 @@ def proses_sheet(
             df[kolom] = None
 
 
-    df = df[
-        KOLOM_LENGKAP
-    ]
+    df = df[KOLOM_LENGKAP]
 
 
     # --------------------------------------------------
-    # Simpan posisi baris Google Sheets
+    # Simpan posisi baris Google Sheets (PERBAIKAN: _excel_row)
     # --------------------------------------------------
 
-    df["_excel_row"] = (
-        df.index
-        + baris_header
-        + 2
-    )
-
+    df["_excel_row"] = df.index + 1
     df["_sheet"] = bulan
 
 
@@ -230,11 +204,7 @@ def proses_sheet(
         "Subtotal",
     ]
 
-    df = df[
-        df[kolom_cek]
-        .notna()
-        .any(axis=1)
-    ].copy()
+    df = df[df[kolom_cek].notna().any(axis=1)].copy()
 
 
     if df.empty:
@@ -245,17 +215,10 @@ def proses_sheet(
     # Isi tanggal ke bawah
     # --------------------------------------------------
 
-    df["Tanggal"] = (
-        df["Tanggal"]
-        .ffill()
-    )
+    df["Tanggal"] = df["Tanggal"].ffill()
 
 
-    df = df[
-        df[kolom_cek]
-        .notna()
-        .any(axis=1)
-    ].copy()
+    df = df[df[kolom_cek].notna().any(axis=1)].copy()
 
 
     if df.empty:
@@ -277,14 +240,11 @@ def proses_sheet(
 # LOAD DATA
 # ==================================================
 
-
 def load_data():
 
     client = get_client()
 
-    sh = client.open_by_key(
-        SPREADSHEET_ID
-    )
+    sh = client.open_by_key(SPREADSHEET_ID)
 
     semua = []
     gagal = []
@@ -294,44 +254,30 @@ def load_data():
     # AMBIL TAHUN DARI NAMA SPREADSHEET
     # ==================================================
 
-    tahun_match = re.search(
-        r"(20\d{2})",
-        sh.title,
-    )
+    tahun_match = re.search(r"(20\d{2})", sh.title)
 
-    tahun = (
-        int(tahun_match.group(1))
-        if tahun_match
-        else None
-    )
+    tahun = int(tahun_match.group(1)) if tahun_match else None
 
 
     # ==================================================
     # BACA 12 SHEET SEKALIGUS
     # ==================================================
 
-    ranges = [
-        f"{bulan}!A:Z"
-        for bulan in BULAN
-    ]
+    ranges = [f"{bulan}!A:Z" for bulan in BULAN]
 
 
     try:
 
         response = sh.values_batch_get(
             ranges,
-            params={
-                "valueRenderOption": "UNFORMATTED_VALUE"
-            },
+            params={"valueRenderOption": "UNFORMATTED_VALUE"},
         )
 
     except Exception as e:
 
         return (
             pd.DataFrame(),
-            [
-                f"Gagal membaca Google Sheets: {e}"
-            ],
+            [f"Gagal membaca Google Sheets: {e}"],
         )
 
 
@@ -339,47 +285,26 @@ def load_data():
     # PROSES HASIL BATCH
     # ==================================================
 
-    value_ranges = response.get(
-        "valueRanges",
-        [],
-    )
+    value_ranges = response.get("valueRanges", [])
 
 
-    for bulan, result in zip(
-        BULAN,
-        value_ranges,
-    ):
+    for bulan, result in zip(BULAN, value_ranges):
 
         try:
 
-            raw = result.get(
-                "values",
-                [],
-            )
+            raw = result.get("values", [])
 
-
-            df = proses_sheet(
-                raw,
-                bulan,
-                tahun,
-            )
-
+            df = proses_sheet(raw, bulan, tahun)
 
             if df is not None:
                 semua.append(df)
 
             else:
-
-                # Jangan dianggap error kalau
-                # sheet memang kosong.
                 continue
-
 
         except Exception as e:
 
-            gagal.append(
-                f"{bulan} gagal dibaca: {e}"
-            )
+            gagal.append(f"{bulan} gagal dibaca: {e}")
 
 
     # ==================================================
@@ -388,45 +313,24 @@ def load_data():
 
     if len(semua) == 0:
 
-        return (
-            pd.DataFrame(),
-            gagal,
-        )
+        return pd.DataFrame(), gagal
 
 
     # ==================================================
     # GABUNG SEMUA BULAN
     # ==================================================
 
-    hasil = pd.concat(
-        semua,
-        ignore_index=True,
-    )
+    hasil = pd.concat(semua, ignore_index=True)
 
 
     # ==================================================
     # KONVERSI ANGKA
     # ==================================================
 
-    hasil["Harga"] = pd.to_numeric(
-        hasil["Harga"],
-        errors="coerce",
-    )
-
-    hasil["Jumlah"] = pd.to_numeric(
-        hasil["Jumlah"],
-        errors="coerce",
-    )
-
-    hasil["Subtotal"] = pd.to_numeric(
-        hasil["Subtotal"],
-        errors="coerce",
-    )
-
-    hasil["Diskon"] = pd.to_numeric(
-        hasil["Diskon"],
-        errors="coerce",
-    )
+    hasil["Harga"] = pd.to_numeric(hasil["Harga"], errors="coerce")
+    hasil["Jumlah"] = pd.to_numeric(hasil["Jumlah"], errors="coerce")
+    hasil["Subtotal"] = pd.to_numeric(hasil["Subtotal"], errors="coerce")
+    hasil["Diskon"] = pd.to_numeric(hasil["Diskon"], errors="coerce")
 
 
     # ==================================================
@@ -453,15 +357,8 @@ def load_data():
     )
 
 
-    hasil["Kategori"] = (
-        hasil["Kategori"]
-        .replace("Nan", "")
-    )
-
-    hasil["Barang"] = (
-        hasil["Barang"]
-        .replace("nan", "")
-    )
+    hasil["Kategori"] = hasil["Kategori"].replace("Nan", "")
+    hasil["Barang"] = hasil["Barang"].replace("nan", "")
 
 
     # ==================================================
@@ -470,11 +367,7 @@ def load_data():
 
     hasil = hasil[
         ~hasil.apply(
-            lambda row:
-                row.astype(str)
-                .str.upper()
-                .str.contains("TOTAL")
-                .any(),
+            lambda row: row.astype(str).str.upper().str.contains("TOTAL").any(),
             axis=1,
         )
     ].reset_index(drop=True)
@@ -520,19 +413,10 @@ def tambah_baris(
 
     client = get_client()
 
-    ws = (
-        client
-        .open_by_key(SPREADSHEET_ID)
-        .worksheet(bulan)
-    )
-
+    ws = client.open_by_key(SPREADSHEET_ID).worksheet(bulan)
 
     # Hitung diskon
-    diskon = max(
-        (harga * jumlah) - subtotal,
-        0,
-    )
-
+    diskon = max((harga * jumlah) - subtotal, 0)
 
     ws.append_row(
         [
@@ -548,97 +432,64 @@ def tambah_baris(
 
 
 # ==================================================
-# HAPUS BARIS
+# HAPUS BARIS (DIPERBAIKI)
 # ==================================================
 
-
 def hapus_baris(daftar_hapus):
-
     if not daftar_hapus:
         raise ValueError("daftar_hapus kosong")
 
     client = get_client()
-
     sh = client.open_by_key(SPREADSHEET_ID)
 
-    hasil = []
-
+    # Kumpulkan nomor baris menurut sheet.
+    baris_per_sheet = {}
     for item in daftar_hapus:
-
-        sheet_name = str(
-            item.get("_sheet", "")
-        ).strip()
-
+        sheet_name = str(item.get("_sheet", "")).strip()
         row_number = item.get("_excel_row")
 
         if not sheet_name:
-            raise ValueError("_sheet kosong")
-
+            raise ValueError("sheet_kosong")
         if row_number in (None, ""):
             raise ValueError("_excel_row kosong")
 
         row_number = int(float(row_number))
 
+        if row_number < 1:
+            raise ValueError(f"Nomor baris tidak valid: {row_number}")
+
+        baris_per_sheet.setdefault(sheet_name, set()).add(row_number)
+
+    # Buat satu permintaan API, urut menurun per sheet.
+    requests = []
+
+    for sheet_name, row_numbers in baris_per_sheet.items():
         ws = sh.worksheet(sheet_name)
 
-        # Baca data sebelum dihapus
-        sebelum = ws.get(
-            f"A{row_number}:G{row_number}"
-        )
-
-        hasil.append(
-            f"SEBELUM: {sheet_name} baris {row_number} = {sebelum}"
-        )
-
-        # Perintah hapus
-        response = sh.batch_update({
-            "requests": [
-                {
-                    "deleteDimension": {
-                        "range": {
-                            "sheetId": ws.id,
-                            "dimension": "ROWS",
-                            "startIndex": row_number - 1,
-                            "endIndex": row_number
-                        }
+        for row_number in sorted(row_numbers, reverse=True):
+            requests.append({
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": ws.id,
+                        "dimension": "ROWS",
+                        "startIndex": row_number - 1,
+                        "endIndex": row_number,
                     }
                 }
-            ]
-        })
+            })
 
-        hasil.append(
-            f"API DELETE RESPONSE: {response}"
-        )
+    return sh.batch_update({"requests": requests})
 
-        # Cek posisi yang sama setelah penghapusan
-        sesudah = ws.get(
-            f"A{row_number}:G{row_number}"
-        )
-
-        hasil.append(
-            f"SESUDAH: {sheet_name} baris {row_number} = {sesudah}"
-        )
-
-    return hasil
 
 # ==================================================
 # UPDATE / SIMPAN EDIT
 # ==================================================
 
-def update_baris(
-    data_edit,
-):
+def update_baris(data_edit):
 
     client = get_client()
 
-    sh = client.open_by_key(
-        SPREADSHEET_ID
-    )
-
-
-    # ==================================================
-    # KELOMPOKKAN BERDASARKAN SHEET
-    # ==================================================
+    sh = client.open_by_key(SPREADSHEET_ID)
 
     per_sheet = {}
 
@@ -646,167 +497,50 @@ def update_baris(
 
         sheet_name = row["_sheet"]
 
-        per_sheet.setdefault(
-            sheet_name,
-            [],
-        ).append(row)
-
-
-    # ==================================================
-    # UPDATE SETIAP SHEET
-    # ==================================================
+        per_sheet.setdefault(sheet_name, []).append(row)
 
     for sheet_name, rows in per_sheet.items():
 
-        ws = sh.worksheet(
-            sheet_name
-        )
-
+        ws = sh.worksheet(sheet_name)
 
         for row in rows:
 
-            excel_row = int(
-                row["_excel_row"]
-            )
+            excel_row = int(row["_excel_row"])
 
-
-            # --------------------------------------------------
-            # TANGGAL
-            # --------------------------------------------------
-
-            tanggal = str(
-                row.get(
-                    "Tanggal",
-                    "",
-                )
-            ).strip()
-
-
-            # --------------------------------------------------
-            # KATEGORI
-            # --------------------------------------------------
-
-            kategori = row.get(
-                "Kategori",
-                "",
-            )
-
-
-            # --------------------------------------------------
-            # BARANG
-            # --------------------------------------------------
-
-            barang = row.get(
-                "Barang",
-                "",
-            )
-
-
-            # --------------------------------------------------
-            # HARGA
-            # --------------------------------------------------
+            tanggal = str(row.get("Tanggal", "")).strip()
+            kategori = row.get("Kategori", "")
+            barang = row.get("Barang", "")
 
             try:
-
                 harga = float(
-                    str(
-                        row.get(
-                            "Harga",
-                            "0",
-                        )
-                    )
-                    .replace(
-                        ".",
-                        "",
-                    )
-                    .replace(
-                        ",",
-                        "",
-                    )
+                    str(row.get("Harga", "0"))
+                    .replace(".", "")
+                    .replace(",", "")
                     .strip()
                 )
-
-            except (
-                ValueError,
-                TypeError,
-            ):
-
-                harga = 0
-
-
-            # --------------------------------------------------
-            # JUMLAH
-            # --------------------------------------------------
+            except (ValueError, TypeError):
+                harga = 0.0
 
             try:
-
                 jumlah = float(
-                    str(
-                        row.get(
-                            "Jumlah",
-                            "1",
-                        )
-                    )
-                    .replace(
-                        ",",
-                        ".",
-                    )
+                    str(row.get("Jumlah", "1"))
+                    .replace(",", ".")
                     .strip()
                 )
-
-            except (
-                ValueError,
-                TypeError,
-            ):
-
-                jumlah = 1
-
-
-            # --------------------------------------------------
-            # SUBTOTAL
-            # --------------------------------------------------
+            except (ValueError, TypeError):
+                jumlah = 1.0
 
             try:
-
                 subtotal = float(
-                    str(
-                        row.get(
-                            "Subtotal",
-                            "0",
-                        )
-                    )
-                    .replace(
-                        ".",
-                        "",
-                    )
-                    .replace(
-                        ",",
-                        "",
-                    )
+                    str(row.get("Subtotal", "0"))
+                    .replace(".", "")
+                    .replace(",", "")
                     .strip()
                 )
+            except (ValueError, TypeError):
+                subtotal = 0.0
 
-            except (
-                ValueError,
-                TypeError,
-            ):
-
-                subtotal = 0
-
-
-            # --------------------------------------------------
-            # HITUNG DISKON
-            # --------------------------------------------------
-
-            diskon = max(
-                (harga * jumlah) - subtotal,
-                0,
-            )
-
-
-            # --------------------------------------------------
-            # UPDATE A:G
-            # --------------------------------------------------
+            diskon = max((harga * jumlah) - subtotal, 0)
 
             ws.update(
                 f"A{excel_row}:G{excel_row}",

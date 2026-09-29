@@ -1,65 +1,42 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-import numpy as np
-import os
-import re
 
 from utils.sheets import (
     load_data,
     tambah_baris,
     hapus_baris,
-    update_baris
+    update_baris,
 )
-
 from utils.format import rupiah
 
 
-# ==================================================
-# KONFIGURASI COMPONENT
-# ==================================================
+st.set_page_config(
+    page_title="Dashboard Pengeluaran",
+    layout="wide",
+)
 
 editable_table = components.declare_component(
     "editable_table",
-    path="components/editable_table"
+    path="components/editable_table",
 )
 
-
-# ==================================================
-# KONFIGURASI STREAMLIT
-# ==================================================
-
-st.set_page_config(
-    page_title="Dashboard Pengeluaran",
-    layout="wide"
-)
-
-
-# ==================================================
-# CSS
-# ==================================================
 
 with open("assets/style.css") as f:
     st.markdown(
         f"<style>{f.read()}</style>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
-# ==================================================
-# LOAD DATA
-# ==================================================
-
+# Baca data dari Google Sheets
 df, errors = load_data()
 
 if errors:
     st.warning("\n".join(errors))
 
 
-# ==================================================
-# BERSIHKAN DATA
-# ==================================================
-
+# Bersihkan data
 df = df[
     df["Tanggal"].astype(str).str.strip() != "Tanggal"
 ].reset_index(drop=True)
@@ -70,44 +47,24 @@ df = df[
         .str.upper()
         .str.contains("TOTAL")
         .any(),
-        axis=1
+        axis=1,
     )
 ].reset_index(drop=True)
 
 
-# ==================================================
-# PASTIKAN KOLOM ANGKA NUMERIK
-# ==================================================
-
-df["Harga"] = pd.to_numeric(
-    df["Harga"],
-    errors="coerce"
-)
-
-df["Jumlah"] = pd.to_numeric(
-    df["Jumlah"],
-    errors="coerce"
-)
-
+# Pastikan nilai angka bertipe numerik
+df["Harga"] = pd.to_numeric(df["Harga"], errors="coerce")
+df["Jumlah"] = pd.to_numeric(df["Jumlah"], errors="coerce")
 df["Subtotal"] = pd.to_numeric(
     df["Subtotal"],
-    errors="coerce"
+    errors="coerce",
 ).fillna(0)
 
-
-# ==================================================
-# HITUNG DISKON
-# ==================================================
-
+# Hitung diskon
 df["Diskon"] = (
-    (df["Harga"] * df["Jumlah"])
-    - df["Subtotal"]
+    (df["Harga"] * df["Jumlah"]) - df["Subtotal"]
 ).clip(lower=0)
 
-
-# ==================================================
-# URUTAN BULAN
-# ==================================================
 
 urutan_bulan = [
     "Januari",
@@ -121,114 +78,72 @@ urutan_bulan = [
     "September",
     "Oktober",
     "November",
-    "Desember"
+    "Desember",
 ]
 
 
-# ==================================================
-# TAMBAH PENGELUARAN
-# ==================================================
-
+# Tambah pengeluaran
 with st.expander("+ Tambah Pengeluaran"):
-
     with st.form("form_tambah_pengeluaran"):
-
-        bulan_input = st.selectbox(
-            "Bulan",
-            urutan_bulan
-        )
-
+        bulan_input = st.selectbox("Bulan", urutan_bulan)
         tanggal_input = st.number_input(
             "Tanggal",
             min_value=1,
             max_value=31,
-            step=1
+            step=1,
         )
-
-        kategori_input = st.text_input(
-            "Kategori"
-        )
-
-        barang_input = st.text_input(
-            "Nama Barang"
-        )
-
+        kategori_input = st.text_input("Kategori")
+        barang_input = st.text_input("Nama Barang")
         harga_input = st.number_input(
             "Harga",
             min_value=0,
-            step=500
+            step=500,
         )
-
         jumlah_input = st.number_input(
             "Jumlah",
             min_value=1,
-            step=1
+            step=1,
         )
-
         subtotal_input = st.number_input(
             "Subtotal (setelah diskon)",
             min_value=0,
-            step=500
+            step=500,
         )
 
-        submit = st.form_submit_button(
-            "Simpan"
-        )
+        submit = st.form_submit_button("Simpan")
 
         if submit:
-
-            tambah_baris(
-                bulan_input,
-                tanggal_input,
-                kategori_input,
-                barang_input,
-                harga_input,
-                jumlah_input,
-                subtotal_input
-            )
-
-            st.success(
-                "Data berhasil ditambahkan!"
-            )
-
-            # Bersihkan cache supaya data terbaru
-            # langsung diambil dari Google Sheets
-            st.cache_data.clear()
-
-            st.rerun()
+            try:
+                tambah_baris(
+                    bulan_input,
+                    tanggal_input,
+                    kategori_input,
+                    barang_input,
+                    harga_input,
+                    jumlah_input,
+                    subtotal_input,
+                )
+                st.success("Data berhasil ditambahkan.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"GAGAL MENYIMPAN: {type(e).__name__}: {e}")
 
 
-# ==================================================
-# FILTER BULAN
-# ==================================================
-
+# Filter bulan
 bulan_list = ["Semua"] + [
-    bulan
-    for bulan in urutan_bulan
+    bulan for bulan in urutan_bulan
     if bulan in df["Bulan"].unique()
 ]
 
-pilih_bulan = st.sidebar.selectbox(
-    "Bulan",
-    bulan_list
-)
-
+pilih_bulan = st.sidebar.selectbox("Bulan", bulan_list)
 
 if pilih_bulan == "Semua":
-
     hasil_bulan = df.copy()
-
 else:
-
-    hasil_bulan = df[
-        df["Bulan"] == pilih_bulan
-    ].copy()
+    hasil_bulan = df[df["Bulan"] == pilih_bulan].copy()
 
 
-# ==================================================
-# FILTER KATEGORI
-# ==================================================
-
+# Filter kategori
 kategori_list = ["Semua"] + sorted(
     hasil_bulan["Kategori"]
     .dropna()
@@ -236,27 +151,17 @@ kategori_list = ["Semua"] + sorted(
     .unique()
 )
 
-pilih_kategori = st.sidebar.selectbox(
-    "Kategori",
-    kategori_list
-)
-
+pilih_kategori = st.sidebar.selectbox("Kategori", kategori_list)
 
 if pilih_kategori == "Semua":
-
     hasil = hasil_bulan.copy()
-
 else:
-
     hasil = hasil_bulan[
         hasil_bulan["Kategori"] == pilih_kategori
     ].copy()
 
 
-# ==================================================
-# JUDUL FILTER
-# ==================================================
-
+# Judul
 judul = []
 
 if pilih_bulan != "Semua":
@@ -265,53 +170,18 @@ if pilih_bulan != "Semua":
 if pilih_kategori != "Semua":
     judul.append(pilih_kategori)
 
-
-if judul:
-
-    st.subheader(
-        " - ".join(judul)
-    )
-
-else:
-
-    st.subheader(
-        "Semua Pengeluaran"
-    )
+st.subheader(" - ".join(judul) if judul else "Semua Pengeluaran")
 
 
-# ==================================================
-# TOTAL
-# ==================================================
-
+# Total
 c1, c2, c3 = st.columns(3)
 
-
-c1.metric(
-    "Jumlah Transaksi",
-    len(hasil)
-)
+c1.metric("Jumlah Transaksi", len(hasil))
+c2.metric("Total Pengeluaran", rupiah(hasil["Subtotal"].sum()))
+c3.metric("Total Diskon", rupiah(hasil["Diskon"].sum()))
 
 
-c2.metric(
-    "Total Pengeluaran",
-    rupiah(
-        hasil["Subtotal"].sum()
-    )
-)
-
-
-c3.metric(
-    "Total Diskon",
-    rupiah(
-        hasil["Diskon"].sum()
-    )
-)
-
-
-# ==================================================
-# TABEL UTAMA
-# ==================================================
-
+# Siapkan data tabel
 kolom_tabel = [
     "Tanggal",
     "Kategori",
@@ -319,115 +189,85 @@ kolom_tabel = [
     "Harga",
     "Jumlah",
     "Subtotal",
-    "Diskon"
+    "Diskon",
 ]
 
-
-# Tampilkan Bulan jika memilih Semua
 if pilih_bulan == "Semua":
-
-    kolom_tabel = [
-        "Bulan"
-    ] + kolom_tabel
-
+    kolom_tabel = ["Bulan"] + kolom_tabel
 
 data_tabel = hasil[
-    kolom_tabel + [
-        "_sheet",
-        "_excel_row"
-    ]
+    kolom_tabel + ["_sheet", "_excel_row"]
 ].copy()
 
-
-# ==================================================
-# BERSIHKAN NILAI KOSONG
-# ==================================================
-
 data_tabel = data_tabel.fillna("")
+records = data_tabel.to_dict("records")
 
 
-# ==================================================
-# UBAH DATA MENJADI RECORD
-# ==================================================
-
-records = data_tabel.to_dict(
-    "records"
-)
+# Key baru membuat komponen tabel dibuat ulang setelah perubahan
+table_version = st.session_state.get("table_version", 0)
 
 
-# ==================================================
-# VERSI TABLE
-# ==================================================
-
-table_version = st.session_state.get(
-    "table_version",
-    0
-)
-
-
-# ==================================================
-# EDITABLE TABLE
-# ==================================================
-
+# Tabel custom untuk edit/simpan
 edited = editable_table(
     data=records,
-    key=f"editable_table_{table_version}"
+    key=f"editable_table_{table_version}",
 )
 
 
-# ==================================================
-# HAPUS BARIS
-# ==================================================
-if edited and edited.get("action") == "delete":
-
-    data_hapus = edited.get("data", [])
-
+def hapus_dan_refresh(data_hapus):
     if not data_hapus:
-        st.error("Data hapus kosong.")
-        st.stop()
+        st.error("Belum ada transaksi yang dipilih.")
+        return
 
     try:
-
-        hasil_hapus = hapus_baris(data_hapus)
-
-        for pesan in hasil_hapus:
-            st.write(pesan)
-
-        st.success("Perintah DELETE berhasil dikirim ke Google Sheets.")
-
-
-        st.session_state.table_version = (
-            table_version + 1
-        )
-
+        hapus_baris(data_hapus)
+        st.session_state["table_version"] = table_version + 1
         st.rerun()
-
     except Exception as e:
+        st.error(f"DELETE GAGAL: {type(e).__name__}: {e}")
 
-        st.error(
-            f"GAGAL HAPUS: {type(e).__name__}: {e}"
-        )
-# ==================================================
-# SIMPAN HASIL EDIT
-# ==================================================
 
+# Jalur hapus dari tombol di dalam custom table
+if edited and edited.get("action") == "delete":
+    hapus_dan_refresh(edited.get("data", []))
+
+
+# Jalur hapus dari tombol native Streamlit
+indeks_hapus = st.multiselect(
+    "Pilih transaksi yang akan dihapus",
+    options=list(range(len(records))),
+    format_func=lambda i: (
+        f"{i + 1}. "
+        f"{records[i].get('Bulan', '')} | "
+        f"{records[i].get('Tanggal', '')} | "
+        f"{records[i].get('Kategori', '')} | "
+        f"{records[i].get('Barang', '')} | "
+        f"baris Sheet {records[i].get('_excel_row', '')}"
+    ),
+    key=f"pilihan_hapus_{table_version}",
+)
+
+konfirmasi_hapus = st.checkbox(
+    "Saya yakin ingin menghapus transaksi terpilih",
+    key=f"konfirmasi_hapus_{table_version}",
+)
+
+if st.button(
+    "Hapus transaksi terpilih",
+    type="primary",
+    disabled=not indeks_hapus or not konfirmasi_hapus,
+    key=f"hapus_transaksi_{table_version}",
+):
+    data_hapus = [records[i] for i in indeks_hapus]
+    hapus_dan_refresh(data_hapus)
+
+
+# Simpan hasil edit dari custom table
 if edited and edited.get("action") == "save":
-
-    update_baris(
-        edited["data"]
-    )
-
-    st.success(
-        "Perubahan berhasil disimpan."
-    )
-
-    # Bersihkan cache Google Sheets
-    st.cache_data.clear()
-
-    # Ganti key table supaya component
-    # mengambil data terbaru
-    st.session_state.table_version = (
-        table_version + 1
-    )
-
-    st.rerun()
+    try:
+        update_baris(edited["data"])
+        st.session_state["table_version"] = table_version + 1
+        st.success("Perubahan berhasil disimpan.")
+        st.rerun()
+    except Exception as e:
+        st.error(f"GAGAL MENYIMPAN EDIT: {type(e).__name__}: {e}")
