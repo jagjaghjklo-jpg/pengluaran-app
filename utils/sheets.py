@@ -418,16 +418,69 @@ def tambah_baris(
     # Hitung diskon
     diskon = max((harga * jumlah) - subtotal, 0)
 
-    ws.append_row(
-        [
-            tanggal,
-            kategori,
-            barang,
-            harga,
-            jumlah,
-            subtotal,
-            diskon,
-        ]
+    nilai_baru = [
+        tanggal,
+        kategori,
+        barang,
+        harga,
+        jumlah,
+        subtotal,
+        diskon,
+    ]
+
+    semua_baris = ws.get_all_values()
+
+    # Cari baris header agar tetap benar meskipun header bukan di baris pertama.
+    baris_header = next(
+        (
+            nomor
+            for nomor, row in enumerate(semua_baris, start=1)
+            if row and normalisasi(row[0]) == normalisasi("Tanggal")
+        ),
+        None,
+    )
+    if baris_header is None:
+        raise ValueError(f"Header 'Tanggal' tidak ditemukan di tab {bulan}.")
+
+    def ambil_hari(nilai):
+        if nilai in (None, ""):
+            return None
+        try:
+            angka = float(str(nilai).strip())
+            if angka.is_integer() and 1 <= int(angka) <= 31:
+                return int(angka)
+        except (TypeError, ValueError):
+            pass
+
+        tanggal_parsed = pd.to_datetime(str(nilai), errors="coerce", dayfirst=True)
+        if not pd.isna(tanggal_parsed):
+            return int(tanggal_parsed.day)
+        return None
+
+    hari_baru = int(tanggal)
+    baris_sisip = len(semua_baris) + 1
+    hari_sebelumnya = None
+
+    for nomor, row in enumerate(semua_baris[baris_header:], start=baris_header + 1):
+        isi = " ".join(str(nilai) for nilai in row).upper()
+        if "TOTAL" in isi:
+            baris_sisip = nomor
+            break
+
+        hari = ambil_hari(row[0] if row else None)
+        if hari is not None:
+            hari_sebelumnya = hari
+        else:
+            hari = hari_sebelumnya
+
+        if hari is not None and hari > hari_baru:
+            baris_sisip = nomor
+            break
+
+    ws.insert_row(
+        nilai_baru,
+        index=baris_sisip,
+        value_input_option="USER_ENTERED",
     )
 
 
